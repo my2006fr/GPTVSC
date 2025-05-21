@@ -151,7 +151,8 @@ def delete_message(message_id):
 @socketio.on('send_message')
 def handle_send_message(data):
     if 'user_id' not in session:
-        return
+        return emit('error', {'message': 'User not logged in.'})
+
 
     sender_id = session['user_id']
     receiver_id = data.get('receiver_id')
@@ -214,9 +215,9 @@ def create_db_and_tables():
     with app.app_context():
         db.create_all()
     print("Database tables checked/created.")
-
+    
+create_db_and_tables()
 if __name__ == '__main__':
-    create_db_and_tables()
     socketio.run(
         app,
         debug=bool(os.environ.get("DEBUG", False)),
