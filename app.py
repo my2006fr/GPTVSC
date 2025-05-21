@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, session, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
@@ -6,8 +9,6 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash # For password hashing
 from functools import wraps # For login_required decorator
 import os
-import eventlet
-eventlet.monkey_patch()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'flaskchatitsasecretkey')
@@ -150,7 +151,6 @@ def delete_message(message_id):
 @socketio.on('send_message')
 def handle_send_message(data):
     if 'user_id' not in session:
-        emit('error', {'message': 'User not authenticated. Please log in.'})
         return
 
     sender_id = session['user_id']
