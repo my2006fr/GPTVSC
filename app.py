@@ -5,10 +5,11 @@ from flask_socketio import SocketIO, emit, join_room
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash # For password hashing
 from functools import wraps # For login_required decorator
+import os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'flaskchatitsasecretkey' # IMPORTANT: Change this in production and keep it secret!
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///chat.db'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'flaskchatitsasecretkey')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///chat.db')
 app.config['SESSION_TYPE'] = 'filesystem'
 
 db = SQLAlchemy(app)
@@ -214,6 +215,9 @@ def create_db_and_tables():
 
 if __name__ == '__main__':
     create_db_and_tables()
-    # For production, use a proper WSGI server like gunicorn with eventlet or gevent
-    # e.g., gunicorn --worker-class eventlet -w 1 app:app
-    socketio.run(app, debug=True,host="127.0.0.1", port="5001")
+    socketio.run(
+        app,
+        debug=bool(os.environ.get("DEBUG", False)),
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000))
+    )
