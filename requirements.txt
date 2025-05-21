@@ -5,4 +5,3 @@ Flask-SocketIO
 eventlet
 Werkzeug
 gunicorn
-web: gunicorn --worker-class eventlet -w 1 app:app
