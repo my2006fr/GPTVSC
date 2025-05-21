@@ -11,7 +11,7 @@ eventlet.monkey_patch()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'flaskchatitsasecretkey')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgres:///chats.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///chat.db').replace('postgres://', 'postgresql://')
 app.config['SESSION_TYPE'] = 'filesystem'
 
 db = SQLAlchemy(app)
