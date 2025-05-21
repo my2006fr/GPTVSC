@@ -1,0 +1,218 @@
+<!-- @format -->
+
+{% extends "base.html" %} {% block title %}Chat - FlaskChat{% endblock %} {%
+block content %}
+<div class="chat-container">
+  <div class="user-list-container">
+    <h5>Users</h5>
+    <ul class="list-group" id="user-list-ul">
+      {% for u in users %}
+      <li
+        class="list-group-item list-group-item-action"
+        data-userid="{{ u.id }}"
+        data-username="{{ u.username }}">
+        {{ u.username }}
+      </li>
+      {% else %}
+      <li class="list-group-item">No other users found.</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="chat-area-container">
+    <div class="chat-header">
+      <h4 id="chat-with-username">Select a user to chat with</h4>
+    </div>
+    <div id="chat-window" class="messages-window">
+      <!-- Messages will be loaded here -->
+      <p
+        class="text-muted text-center"
+        id="no-chat-selected-placeholder"
+        style="margin: auto">
+        Please select a user from the list to start chatting.
+      </p>
+    </div>
+    <div class="message-input-area">
+      <input
+        type="text"
+        id="message-input-field"
+        class="form-control"
+        placeholder="Type a message..."
+        disabled />
+      <button id="send-button" class="btn btn-primary" disabled>Send</button>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %} {{ super() }}
+<script>
+  $(document).ready(function () {
+      const socket = io();
+      const currentUserId = parseInt("{{ user_id }}"); // Ensure it's a number
+      const currentUsername = "{{ current_username }}";
+      const faviconUrl = "{{ url_for('static', filename='img/icon.jpg') }}"; // Or your .png path
+      let selectedUserId = null;
+      let selectedUsername = null;
+
+      {% raw %}
+      // Basic HTML escaping function
+      function escapeHtml(unsafe) {
+          if (typeof unsafe !== 'string') return '';
+          return unsafe
+               .replace(/&/g, "&amp;")
+               .replace(/</g, "&lt;")
+               .replace(/>/g, "&gt;")
+               .replace(/"/g, "&quot;")
+               .replace(/'/g, "&#039;");
+      }
+      {% endraw %}
+
+      // --- Notification Logic ---
+      function requestNotificationPermission() {
+          if (!("Notification" in window)) {
+              console.log("This browser does not support desktop notification");
+          } else if (Notification.permission === "granted") {
+              console.log("Notification permission already granted.");
+              return;
+          } else if (Notification.permission !== "denied") {
+              Notification.requestPermission().then(function (permission) {
+                  if (permission === "granted") {
+                      console.log("Notification permission granted.");
+                  }
+              });
+          }
+      }
+
+      // Request permission when the page loads
+      requestNotificationPermission();
+
+      socket.on('connect', function () {
+          console.log('Connected to SocketIO server. Current User ID:', currentUserId);
+          if (currentUserId) {
+              socket.emit('join', { 'user_id': currentUserId });
+          }
+      });
+
+      socket.on('error', function(data) {
+          console.error('SocketIO Error:', data.message);
+          // You could display this error to the user, e.g., via an alert or a toast notification
+          alert('Error: ' + data.message);
+      });
+
+      function scrollToBottom() {
+          const chatWindow = $('#chat-window');
+          chatWindow.scrollTop(chatWindow[0].scrollHeight);
+      }
+
+      function displayMessage(msg) {
+          const chatWindow = $('#chat-window');
+          $('#no-chat-selected-placeholder').hide(); // Hide placeholder if visible
+
+          const isSentByCurrentUser = msg.sender_id === currentUserId;
+          const messageClass = isSentByCurrentUser ? 'sent' : 'received';
+
+          const safeContent = escapeHtml(msg.content);
+          const formattedTimestamp = msg.timestamp; // Assuming timestamp is already formatted by server
+
+          const messageElement = $(`
+              <div class="message ${messageClass}" data-message-id="${msg.id}">
+                  <p>${safeContent}</p>
+                  <span class="timestamp">${formattedTimestamp}</span>
+                  ${msg.sender_id === currentUserId ? `<form method="POST" action="/delete/${msg.id}" class="delete">
+                  <button type="submit" class="delete-message">🗑</button></form>` : ""}
+              </div>
+          `);
+          chatWindow.append(messageElement);
+          scrollToBottom();
+      }
+
+      $('#user-list-ul').on('click', 'li.list-group-item-action', function () {
+          $('#user-list-ul li').removeClass('active');
+          $(this).addClass('active');
+          // Remove any 'New' badges from this user
+          $(this).find('.badge-new-message').remove();
+
+
+          selectedUserId = parseInt($(this).data('userid'));
+          selectedUsername = $(this).data('username');
+
+          $('#chat-with-username').text(escapeHtml(selectedUsername));
+          $('#message-input-field').prop('disabled', false).focus();
+          $('#send-button').prop('disabled', false);
+          $('#chat-window').empty(); // Clear previous messages
+          $('#no-chat-selected-placeholder').hide();
+
+
+          // Fetch historical messages
+          if (selectedUserId) {
+              $.get(`/messages/${selectedUserId}`, function (data) {
+                  if (data.messages && data.messages.length > 0) {
+                      data.messages.forEach(function (msg) {
+                          displayMessage(msg);
+                      });
+                  } else {
+                       $('#chat-window').append('<p class="text-muted text-center" style="margin: auto;">No messages yet. Start the conversation!</p>');
+                  }
+                  scrollToBottom();
+              }).fail(function(jqXHR, textStatus, errorThrown) {
+                  console.error("Error fetching messages:", textStatus, errorThrown);
+                  $('#chat-window').append('<p class="text-danger text-center" style="margin: auto;">Could not load messages.</p>');
+              });
+          }
+      });
+
+      function sendMessage() {
+          const messageContent = $('#message-input-field').val();
+          if (messageContent.trim() !== '' && selectedUserId) {
+              socket.emit('send_message', {
+                  'receiver_id': selectedUserId,
+                  'content': messageContent.trim()
+              });
+              $('#message-input-field').val('');
+          }else{
+              alert("Please Enter a chat!!🤬😡");
+          }
+      }
+
+      $('#send-button').on('click', sendMessage);
+
+      $('#message-input-field').on('keypress', function(e) {
+          if (e.which === 13 && !e.shiftKey) { // Enter key pressed (without Shift for multiline)
+              e.preventDefault();
+              sendMessage();
+          }
+      });
+
+      socket.on('receive_message', function (msg) {
+          console.log('Received message:', msg);
+          // Check if the message is part of the currently active chat
+          // Or if the message is sent by the current user (to update their own screen if they sent it)
+          if (selectedUserId &&
+              ((msg.sender_id === selectedUserId && msg.receiver_id === currentUserId) || // Received from selected user
+               (msg.sender_id === currentUserId && msg.receiver_id === selectedUserId))) { // Sent by current user to selected user
+              displayMessage(msg);
+          } else if (msg.receiver_id === currentUserId && msg.sender_id !== selectedUserId) {
+              // This is a message for the current user, but not from the actively selected chat partner.
+              // Show a browser notification if permission is granted and tab is not active
+              if (Notification.permission === "granted" && document.hidden) {
+                  const notification = new Notification(`New message from ${escapeHtml(msg.sender_username || 'User')}`, {
+                      body: escapeHtml(msg.content),
+                      icon: faviconUrl // Use the favicon URL
+                  });
+                  notification.onclick = function() {
+                      window.focus(); // Focus the window when notification is clicked
+                      // Optionally, you could also try to switch to the chat with this user:
+                       $(`#user-list-ul li[data-userid="${msg.sender_id}"]`).click();
+                  };
+              }
+
+              // Notification for a message from a user not currently in active chat
+              console.log(`New message from user ${msg.sender_id} (not active chat)`);
+              const userListItem = $(`#user-list-ul li[data-userid="${msg.sender_id}"]`);
+              if (userListItem.length && !userListItem.find('.badge-new-message').length) {
+                  userListItem.append(' <span class="badge badge-danger badge-pill badge-new-message">New+1</span>');
+              }
+              // You could also implement a more general notification system (e.g., browser notifications)
+          }
+      });
+  });
+</script>
+{% endblock %}
